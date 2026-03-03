@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+.eggs/
+dist/
+build/
+*.so
+
+# Environment
+.env
+!.env.example
+
+# Uploads / models
+backend/uploads/
+lora_adapter/
+*.bin
+*.safetensors
+*.pt
+*.onnx
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# MLFlow / logs
+mlruns/
+*.log

@@ -1,0 +1,149 @@
+version: "3.9"
+
+services:
+
+  # ── Backend API ─────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../backend/.env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://raguser:ragpassword@postgres:5432/ragdb
+      - QDRANT_HOST=qdrant
+      - ES_HOST=http://elasticsearch:9200
+      - REDIS_URL=redis://redis:6379/0
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      elasticsearch:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - uploads:/app/uploads
+    restart: unless-stopped
+    networks:
+      - rag-net
+
+  # ── Frontend ─────────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - rag-net
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER:     raguser
+      POSTGRES_PASSWORD: ragpassword
+      POSTGRES_DB:       ragdb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raguser -d ragdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag-net
+
+  # ── Qdrant ───────────────────────────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.9.2
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - rag-net
+
+  # ── Elasticsearch ────────────────────────────────────────────────────────────
+  elasticsearch:
+    image: elasticsearch:8.13.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - rag-net
+
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - rag-net
+
+  # ── MLFlow ───────────────────────────────────────────────────────────────────
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.13.0
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/mlflow
+    networks:
+      - rag-net
+
+  # ── Prometheus ───────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - rag-net
+
+  # ── Grafana ──────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.3
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - rag-net
+
+volumes:
+  pgdata:
+  qdrant_data:
+  es_data:
+  redis_data:
+  mlflow_data:
+  prometheus_data:
+  grafana_data:
+  uploads:
+
+networks:
+  rag-net:
+    driver: bridge
