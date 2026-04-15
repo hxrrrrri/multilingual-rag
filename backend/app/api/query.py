@@ -10,9 +10,6 @@ from pydantic import BaseModel
 import json
 
 from app.services.rag_pipeline import run_rag_pipeline
-from app.services.llm_service import stream_answer, build_prompt
-from app.services.retrieval_service import hybrid_search
-from app.services.reranker_service import reranker_service
 
 router = APIRouter()
 
@@ -54,6 +51,10 @@ async def query_documents(req: QueryRequest):
 async def stream_query(req: QueryRequest):
     if not req.query.strip():
         raise HTTPException(400, "Query cannot be empty.")
+
+    from app.services.llm_service import stream_answer
+    from app.services.retrieval_service import hybrid_search
+    from app.services.reranker_service import reranker_service
 
     candidates = await hybrid_search(req.query, doc_id=req.doc_id)
     top_chunks  = await reranker_service.rerank(req.query, candidates)

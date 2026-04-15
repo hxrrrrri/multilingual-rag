@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     MLFLOW_TRACKING_URI: str = "http://localhost:5000"
     MLFLOW_EXPERIMENT: str = "multilingual-rag"
 
+    # Server
+    APP_HOST: str = "0.0.0.0"
+    APP_PORT: int = 8000
+    LOG_LEVEL: str = "INFO"
+
     # Files
     UPLOAD_DIR: str = "./uploads"
     MAX_FILE_SIZE_MB: int = 50

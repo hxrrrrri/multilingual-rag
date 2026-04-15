@@ -8,26 +8,41 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from loguru import logger
-from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from starlette.responses import Response
 
 from app.api import documents, query, feedback, health
 from app.core.config import settings
 from app.core.database import init_db
 from app.core.vector_store import init_vector_stores
-
-# ── Prometheus metrics ────────────────────────────────────────────────────────
-REQUEST_COUNT   = Counter("rag_requests_total",   "Total HTTP requests", ["method", "endpoint", "status"])
-REQUEST_LATENCY = Histogram("rag_request_latency_seconds", "HTTP request latency", ["endpoint"])
+from app.core.metrics import REQUEST_COUNT, REQUEST_LATENCY
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
     logger.info("Starting Multilingual RAG API…")
-    await init_db()
-    await init_vector_stores()
-    logger.info("All services initialised.")
+    env = settings.APP_ENV.lower()
+    strict_startup = env == "production"
+
+    try:
+        await init_db()
+    except Exception as exc:
+        if strict_startup:
+            raise
+        logger.warning(f"Database init skipped in {env}: {exc}")
+
+    if env not in {"test", "ci"}:
+        try:
+            await init_vector_stores()
+        except Exception as exc:
+            if strict_startup:
+                raise
+            logger.warning(f"Vector store init skipped in {env}: {exc}")
+    else:
+        logger.info("Skipping vector store init in test/ci environment")
+
+    logger.info("Startup completed.")
     yield
     logger.info("Shutting down…")
 
@@ -58,7 +73,7 @@ async def metrics_middleware(request: Request, call_next):
     response = await call_next(request)
     latency = time.time() - start
     endpoint = request.url.path
-    REQUEST_COUNT.labels(request.method, endpoint, response.status_code).inc()
+    REQUEST_COUNT.labels(endpoint, request.method, str(response.status_code)).inc()
     REQUEST_LATENCY.labels(endpoint).observe(latency)
     return response
 
@@ -68,6 +83,17 @@ app.include_router(documents.router, prefix="/api/v1/documents", tags=["Document
 app.include_router(query.router,     prefix="/api/v1",           tags=["Query"])
 app.include_router(feedback.router,  prefix="/api/v1/feedback",  tags=["Feedback"])
 app.include_router(health.router,    prefix="/api/v1",           tags=["Health"])
+
+
+@app.get("/", include_in_schema=False)
+async def root():
+    return {
+        "name": "Multilingual RAG API",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "health": "/api/v1/health",
+        "metrics": "/metrics",
+    }
 
 
 @app.get("/metrics", include_in_schema=False)

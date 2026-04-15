@@ -2,14 +2,10 @@
 RAG Pipeline — orchestrates the full query flow:
   query → hybrid_search → rerank → faithfulness_check → generate → return
 """
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from loguru import logger
 
 from app.services.retrieval_service import hybrid_search
-from app.services.reranker_service import reranker_service
-from app.services.llm_service import generate_answer
-from app.services.faithfulness_service import faithfulness_service
-from app.core.config import settings
 
 MAX_REGENERATION_ATTEMPTS = 2
 
@@ -28,6 +24,10 @@ async def run_rag_pipeline(
         }
     """
     logger.info(f"RAG query: '{query[:80]}' | doc_id={doc_id}")
+
+    from app.services.reranker_service import reranker_service
+    from app.services.llm_service import generate_answer
+    from app.services.faithfulness_service import faithfulness_service
 
     # 1. Hybrid retrieval
     candidates = await hybrid_search(query, doc_id=doc_id)

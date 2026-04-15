@@ -45,12 +45,16 @@ def chunk_pages(
                 "tokens": len(words),
             })
 
+    # Guard: if no sentences were extracted, return empty list
+    if not all_sentences:
+        return []
+
     # Group sentences into chunks
     chunks: List[Dict] = []
     current_text = ""
     current_tokens = 0
-    current_page = all_sentences[0]["page"] if all_sentences else 1
-    current_lang = all_sentences[0]["language"] if all_sentences else "en"
+    current_page = all_sentences[0]["page"]
+    current_lang = all_sentences[0]["language"]
 
     overlap_buf: List[str] = []
 

@@ -1,10 +1,9 @@
 """Pytest configuration and shared fixtures."""
-import pytest
-import asyncio
+import os
+import tempfile
+from pathlib import Path
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+TEST_DB_PATH = Path(tempfile.gettempdir()) / "multilingual_rag_test.sqlite3"
+os.environ.setdefault("APP_ENV", "test")
+os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{TEST_DB_PATH.as_posix()}")

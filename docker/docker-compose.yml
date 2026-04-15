@@ -2,7 +2,24 @@ version: "3.9"
 
 services:
 
-  # ── Backend API ─────────────────────────────────────────────────────────────
+  # ── Ollama (Local LLM) ───────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    runtime: nvidia
+    environment:
+      - OLLAMA_CONTEXT_LENGTH=2048
+      - NVIDIA_VISIBLE_DEVICES=all
+    networks:
+      - rag-net
+    restart: unless-stopped
+
+
+  # ── Backend API ───────────────────────────────────────────────────────
   backend:
     build:
       context: ../backend
@@ -17,6 +34,7 @@ services:
       - ES_HOST=http://elasticsearch:9200
       - REDIS_URL=redis://redis:6379/0
       - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - LLM_BASE_URL=http://ollama:11434/v1
     depends_on:
       postgres:
         condition: service_healthy
@@ -26,13 +44,16 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      ollama:
+        condition: service_started
     volumes:
       - uploads:/app/uploads
-    restart: unless-stopped
     networks:
       - rag-net
+    restart: unless-stopped
 
-  # ── Frontend ─────────────────────────────────────────────────────────────────
+
+  # ── Frontend ──────────────────────────────────────────────────────────
   frontend:
     build:
       context: ../frontend
@@ -44,13 +65,14 @@ services:
     networks:
       - rag-net
 
-  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER:     raguser
+      POSTGRES_USER: raguser
       POSTGRES_PASSWORD: ragpassword
-      POSTGRES_DB:       ragdb
+      POSTGRES_DB: ragdb
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -61,7 +83,8 @@ services:
     networks:
       - rag-net
 
-  # ── Qdrant ───────────────────────────────────────────────────────────────────
+
+  # ── Qdrant ────────────────────────────────────────────────────────────
   qdrant:
     image: qdrant/qdrant:v1.9.2
     ports:
@@ -71,13 +94,14 @@ services:
     networks:
       - rag-net
 
-  # ── Elasticsearch ────────────────────────────────────────────────────────────
+
+  # ── Elasticsearch ─────────────────────────────────────────────────────
   elasticsearch:
     image: elasticsearch:8.13.0
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
     ports:
       - "9200:9200"
     volumes:
@@ -90,7 +114,8 @@ services:
     networks:
       - rag-net
 
-  # ── Redis ────────────────────────────────────────────────────────────────────
+
+  # ── Redis ─────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     ports:
@@ -98,7 +123,8 @@ services:
     networks:
       - rag-net
 
-  # ── MLFlow ───────────────────────────────────────────────────────────────────
+
+  # ── MLFlow ────────────────────────────────────────────────────────────
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.13.0
     command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db
@@ -109,7 +135,8 @@ services:
     networks:
       - rag-net
 
-  # ── Prometheus ───────────────────────────────────────────────────────────────
+
+  # ── Prometheus ────────────────────────────────────────────────────────
   prometheus:
     image: prom/prometheus:v2.52.0
     ports:
@@ -120,7 +147,8 @@ services:
     networks:
       - rag-net
 
-  # ── Grafana ──────────────────────────────────────────────────────────────────
+
+  # ── Grafana ───────────────────────────────────────────────────────────
   grafana:
     image: grafana/grafana:10.4.3
     ports:
@@ -134,16 +162,20 @@ services:
     networks:
       - rag-net
 
+
+# ── Volumes ─────────────────────────────────────────────────────────────
 volumes:
   pgdata:
   qdrant_data:
   es_data:
-  redis_data:
   mlflow_data:
   prometheus_data:
   grafana_data:
   uploads:
+  ollama_data:
 
+
+# ── Network ─────────────────────────────────────────────────────────────
 networks:
   rag-net:
     driver: bridge

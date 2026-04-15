@@ -6,8 +6,10 @@ Pipeline:
   2. If confidence low or image-based → fall back to PaddleOCR
   3. Detect language of each page
 """
-import io
 import os
+import tempfile
+import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Tuple
 
@@ -44,6 +46,61 @@ def detect_language(text: str) -> str:
     return "en"
 
 
+@dataclass
+class OCRPage:
+    page_number: int
+    text: str
+    confidence: float
+    language: str
+    engine_used: str
+
+
+@dataclass
+class OCRResult:
+    pages: List[OCRPage]
+    total_pages: int
+    avg_confidence: float
+    language: str
+    processing_time_seconds: float
+
+
+class OCRService:
+    """Class-based OCR facade used by tests and higher-level orchestrators."""
+
+    def _detect_lang(self, text: str) -> str:
+        if not text or len(text.strip()) < 8:
+            return "en"
+        return detect_language(text)
+
+    def _build_result(self, pages: List[OCRPage], elapsed: float) -> OCRResult:
+        avg_conf = sum(p.confidence for p in pages) / len(pages) if pages else 0.0
+        dominant_lang = self._detect_lang(" ".join(p.text for p in pages)) if pages else "en"
+        return OCRResult(
+            pages=pages,
+            total_pages=len(pages),
+            avg_confidence=avg_conf,
+            language=dominant_lang,
+            processing_time_seconds=elapsed,
+        )
+
+    def extract(self, pdf_path: str, confidence_threshold: float = 0.75) -> OCRResult:
+        start = time.perf_counter()
+        raw_pages, language = extract_text(pdf_path, confidence_threshold=confidence_threshold)
+        pages = [
+            OCRPage(
+                page_number=p["page"],
+                text=p["text"],
+                confidence=float(p.get("confidence", 0.0)),
+                language=p.get("language", language),
+                engine_used=p.get("method", "unknown"),
+            )
+            for p in raw_pages
+        ]
+        result = self._build_result(pages, elapsed=time.perf_counter() - start)
+        result.language = language
+        return result
+
+
 def extract_with_pdfplumber(pdf_path: str) -> List[Dict]:
     """Extract text page-by-page using pdfplumber (digital PDFs)."""
     pages = []
@@ -72,7 +129,7 @@ def extract_with_paddleocr(pdf_path: str) -> List[Dict]:
         clip = page.get_pixmap(matrix=mat)
         img = Image.frombytes("RGB", [clip.width, clip.height], clip.samples)
 
-        img_path = f"/tmp/page_{i}.png"
+        img_path = Path(tempfile.gettempdir()) / f"page_{i}.png"
         img.save(img_path)
 
         result = ocr.ocr(img_path, cls=True)
@@ -85,7 +142,7 @@ def extract_with_paddleocr(pdf_path: str) -> List[Dict]:
                 total_conf += line[1][1]
                 count += 1
 
-        os.remove(img_path)
+        os.remove(str(img_path))
         pages.append({
             "page": i + 1,
             "text": text,

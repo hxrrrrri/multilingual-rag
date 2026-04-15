@@ -11,7 +11,6 @@ from loguru import logger
 
 from app.core.config import settings
 from app.core.vector_store import get_qdrant, get_es
-from app.services.embedding_service import embedding_service
 
 
 async def dense_search(query_vector: List[float], doc_id: str = None, top_k: int = None) -> List[Dict]:
@@ -111,6 +110,8 @@ async def hybrid_search(query: str, doc_id: str = None) -> List[Dict]:
     Full hybrid search pipeline:
       dense_search + sparse_search → RRF fusion → top-k results
     """
+    from app.services.embedding_service import embedding_service
+
     query_vector = await embedding_service.embed_query(query)
 
     dense_results  = await dense_search(query_vector, doc_id=doc_id)

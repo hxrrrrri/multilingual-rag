@@ -7,13 +7,19 @@ from loguru import logger
 
 from app.core.config import settings
 
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=settings.DEBUG,
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
-)
+engine_kwargs = {
+    "echo": settings.DEBUG,
+    "pool_pre_ping": True,
+}
+
+# sqlite does not support queue pool sizing args used by postgres drivers
+if settings.DATABASE_URL.startswith("sqlite"):
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 20
+
+engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
 
 AsyncSessionLocal = async_sessionmaker(
     engine, class_=AsyncSession, expire_on_commit=False

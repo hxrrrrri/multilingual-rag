@@ -52,7 +52,7 @@ async def generate_answer(
                 "model": settings.LLM_MODEL,
                 "messages": messages,
                 "temperature": 0.1,
-                "max_tokens": 1024,
+                "max_tokens": 512,
                 "stream": False,
             },
         )
@@ -81,7 +81,7 @@ async def stream_answer(
                 "model": settings.LLM_MODEL,
                 "messages": messages,
                 "temperature": 0.1,
-                "max_tokens": 1024,
+                "max_tokens": 512,
                 "stream": True,
             },
         ) as response:

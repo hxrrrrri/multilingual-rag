@@ -6,33 +6,16 @@ GET  /api/v1/documents/{id}    — get document details
 DELETE /api/v1/documents/{id}  — delete document
 """
 import os
-from typing import List, Optional
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from loguru import logger
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.document import Document, ProcessingStatus
-from app.services.ingestion_service import ingest_document
+from app.models.document import Document
 
 router = APIRouter()
-
-
-class DocumentResponse(BaseModel):
-    id: str
-    filename: str
-    language: str
-    status: str
-    page_count: int
-    chunk_count: int
-    created_at: str
-
-    class Config:
-        from_attributes = True
 
 
 @router.post("/ingest", summary="Upload and process a PDF document")
@@ -49,6 +32,8 @@ async def ingest(
         raise HTTPException(413, f"File too large ({size_mb:.1f} MB). Max: {settings.MAX_FILE_SIZE_MB} MB.")
 
     logger.info(f"Ingesting: {file.filename} ({size_mb:.2f} MB)")
+    from app.services.ingestion_service import ingest_document
+
     doc = await ingest_document(content, file.filename, db)
 
     return {
